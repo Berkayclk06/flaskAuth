@@ -13,6 +13,7 @@ login_manager.init_app(app)
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(user_id)
+# On official doc, ".query." is missing!
 
 
 app.config['SECRET_KEY'] = os.environ['SEC_KEY']
@@ -40,16 +41,19 @@ def home():
 @app.route('/register', methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        user = User()
-        user.name = request.form.get("name")
-        user.email = request.form.get("email")
-        plain_pass = request.form.get("password")
-        user.password = generate_password_hash(plain_pass, method='pbkdf2:sha256', salt_length=8)
-
-        db.session.add(user)
-        db.session.commit()
-        login_user(user)
-        return redirect(url_for("secrets"))
+        if db.session.query(User).filter_by(email=request.form.get("email")).first():
+            flash("You've already sign-up with that email, please log in!")
+            return redirect(url_for("login"))
+        else:
+            user = User()
+            user.name = request.form.get("name")
+            user.email = request.form.get("email")
+            plain_pass = request.form.get("password")
+            user.password = generate_password_hash(plain_pass, method='pbkdf2:sha256', salt_length=8)
+            db.session.add(user)
+            db.session.commit()
+            login_user(user)
+            return redirect(url_for("secrets"))
     return render_template("register.html")
 
 
@@ -59,13 +63,12 @@ def login():
         log_email = request.form.get("email")
         log_password = request.form.get("password")
         log_user = db.session.query(User).filter_by(email=log_email).first()
-
-        if check_password_hash(log_user.password, log_password):
-            login_user(log_user)
-            return redirect(url_for("secrets"))
-
+        if log_user:
+            if check_password_hash(log_user.password, log_password):
+                login_user(log_user)
+                return redirect(url_for("secrets"))
+        flash("Wrong email or password, please try again.")
     return render_template("login.html")
-    pass
 
 
 @app.route('/secrets')
@@ -83,7 +86,8 @@ def logout():
 @app.route('/download')
 @login_required
 def download():
-    return send_from_directory('static/files/', 'cheat_sheet.pdf')
+    if current_user.is_authenticated:
+        return send_from_directory('static/files/', 'cheat_sheet.pdf')
 
 
 if __name__ == "__main__":
