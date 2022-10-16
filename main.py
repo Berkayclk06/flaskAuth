@@ -30,15 +30,13 @@ def home():
 @app.route('/register', methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        new_user = User(
-            email=request.form.get('Email'),
-            name=request.form.get('Name'),
-            password=request.form.get('Password')
-        )
-        db.session.add(new_user)
+        user = User()
+        user.name = request.form.get("name")
+        user.email = request.form.get("email")
+        user.password = request.form.get("password")
+        db.session.add(user)
         db.session.commit()
         return redirect(url_for("secrets"))
-
     return render_template("register.html")
 
 
@@ -49,7 +47,8 @@ def login():
 
 @app.route('/secrets')
 def secrets():
-    return render_template("secrets.html")
+    reg_name = db.session.query(User).order_by(User.id.desc()).first().name
+    return render_template("secrets.html", name=reg_name)
 
 
 @app.route('/logout')
@@ -59,7 +58,7 @@ def logout():
 
 @app.route('/download')
 def download():
-    pass
+    return send_from_directory('static/files/', 'cheat_sheet.pdf')
 
 
 if __name__ == "__main__":
