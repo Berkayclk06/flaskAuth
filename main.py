@@ -2,10 +2,20 @@ from flask import Flask, render_template, request, url_for, redirect, flash, sen
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user
+import os
 
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = 'any-secret-key-you-choose'
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(user_id)
+
+
+app.config['SECRET_KEY'] = os.environ['SEC_KEY']
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -33,30 +43,45 @@ def register():
         user = User()
         user.name = request.form.get("name")
         user.email = request.form.get("email")
-        user.password = request.form.get("password")
+        plain_pass = request.form.get("password")
+        user.password = generate_password_hash(plain_pass, method='pbkdf2:sha256', salt_length=8)
+
         db.session.add(user)
         db.session.commit()
+        login_user(user)
         return redirect(url_for("secrets"))
     return render_template("register.html")
 
 
-@app.route('/login')
+@app.route('/login', methods=["GET", "POST"])
 def login():
+    if request.method == "POST" and "email" in request.form:
+        log_email = request.form.get("email")
+        log_password = request.form.get("password")
+        log_user = db.session.query(User).filter_by(email=log_email).first()
+
+        if check_password_hash(log_user.password, log_password):
+            login_user(log_user)
+            return redirect(url_for("secrets"))
+
     return render_template("login.html")
+    pass
 
 
 @app.route('/secrets')
+@login_required
 def secrets():
-    reg_name = db.session.query(User).order_by(User.id.desc()).first().name
-    return render_template("secrets.html", name=reg_name)
+    return render_template("secrets.html", name=current_user.name)
 
 
 @app.route('/logout')
 def logout():
-    pass
+    logout_user()
+    return redirect(url_for("home"))
 
 
 @app.route('/download')
+@login_required
 def download():
     return send_from_directory('static/files/', 'cheat_sheet.pdf')
 
